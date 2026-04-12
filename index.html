@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Kiss Ping"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
+  
 <title>Kiss Ping 🐧💋</title>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
 <style>
@@ -860,7 +861,7 @@ html,body{height:100%;overflow:hidden;font-family:'Nunito',sans-serif;background
 // FIREBASE CONFIG — Хэрэглэгч өөрийн config-оо оруулна
 // ══════════════════════════════════════════════════════════
 // 1. Firebase Configuration (PROJECT OWNERS: REPLACE THIS!)
-const FB_CONFIG = {
+const firebaseConfig = {
   apiKey: "AIzaSyCUhbpnhv8zLyAfBbZ1Lvnv65pPJ2PSXHw",
   authDomain: "kissping-cd09c.firebaseapp.com",
   databaseURL: "https://kissping-cd09c-default-rtdb.firebaseio.com",
@@ -908,7 +909,7 @@ var DB = null, dbRef = null, partnerRef = null, isFirebaseReady = false;
 function initFirebase(){
   try{
     if(typeof firebase === 'undefined') return;
-    if(!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
+   if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     DB = firebase.database();
     isFirebaseReady = true;
     if(S.pairCode) listenFirebase();
