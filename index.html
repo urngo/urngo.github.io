@@ -855,7 +855,8 @@ html,body{height:100%;overflow:hidden;font-family:'Nunito',sans-serif;background
     <button class="modal-btn" onclick="sendSecretMsg()">Илгээх 💌</button>
   </div>
 </div>
-
+<script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-database.js"></script>
 <script>
 
 // ══════════════════════════════════════════════════════════
@@ -872,7 +873,17 @@ const firebaseConfig = {
   appId: "1:763351888123:web:e35f9a4151891cdd22005e",
   measurementId: "G-HVEFHGMQXL"
 };
+
+// Сэрэмжлүүлэг: Firebase-ийг давхар эхлүүлэхээс сэргийлсэн шалгалт
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+  
+  // Манай апп-д ашиглаж байгаа DB глобал хувьсагчийг үүсгэх
+        var DB = firebase.database();
+  console.log("Firebase амжилттай бэлэн боллоо!");
 const STORAGE_KEY = 'kp2-state';
+  
 // ══════════════════════════════════════════════════════════
 // LOCAL STATE (localStorage fallback when not paired)
 // ══════════════════════════════════════════════════════════
@@ -2094,7 +2105,7 @@ function initCanvas(){
     });
   }
 }
-function setCanvasColor(c,el){canvasColor=c;document.querySelectorAll('#canvas-colors .cpk').forEach(e=>e.classList.remove('on'));el.classList.add('on');}
+etCanvasColor(c,el){canvasColor=c;document.querySelectorAll('#canvas-colors .cpk').forEach(e=>e.classList.remove('on'));el.classList.add('on');}
 function clearCanvas(){document.getElementById('shared-canvas').getContext('2d').clearRect(0,0,9999,9999);}
 
 // ══════════════════════════════════════════════════════════
@@ -2175,6 +2186,19 @@ window.addEventListener('load',function(){
   }
   localStorage.setItem('kp-lastopen',Date.now());
 });
+<div id="app"></div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-database.js"></script>
+ 
+  
 </script>
+    localStorage.setItem('kp-lastopen',Date.now());
+});
+
+</script>
+<script src="js/my-app-logic.js"></script>
+  
 </body>
 </html>
