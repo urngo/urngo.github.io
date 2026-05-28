@@ -923,7 +923,7 @@ function initFirebase(){
 
 function listenFirebase(){
   // 1. Идэвхтэй бааз эсвэл өрөөний код (S.roomCode) байхгүй бол буцна
-  if(!DB || !S.roomCode) return;
+if(!DB || !S.pairCode) return;
   
  // Хоёр хэрэглэгчийн кодоор дундын ганц өрөөний ID үүсгэх
 var roomId = [S.pairCode, S.partnerCode].sort().join('_');
@@ -933,7 +933,7 @@ dbRef = DB.ref('rooms/' + roomId);
     if(!snap.exists()) return;
     S.messages = Object.values(snap.val()||{});
     // Төгсгөлгүй давталтаас сэргийлж зөвхөн локал санах ойд хадгална
-    localStorage.setItem(''kp2-state', JSON.stringify(S)); 
+    localStorage.setItem('kp2-state', JSON.stringify(S));
     renderMsgs();
   });
 
@@ -1108,73 +1108,59 @@ function genCode(){return Math.floor(100000+Math.random()*900000).toString();}
 function createPairCode(){
   var name=document.getElementById('pair-name').value.trim();
   if(!name){alert('Нэрээ оруулна уу!');return;}
-  S.myName=name; var code=genCode(); S.pairCode=code; save();
-  
-  var box = document.getElementById('my-code-box');
-  var display = document.getElementById('my-code-display');
-  var input = document.getElementById('pair-name');
-  
+  S.myName=name;
+  var code=genCode();
+  S.pairCode=code;
+  save();
+  var box=document.getElementById('my-code-box');
+  var display=document.getElementById('my-code-display');
   if(box) box.style.display='block';
   if(display) display.textContent=code;
-  if(input) input.disabled=true;
-  
   initFirebase();
-  
-  // МAШ ЧУХАЛ ЗАСВАР: Код үүсгэсэн хүн өөрийнхөө өрөөг Firebase дээр сонсож эхэлнэ.
-  // Нөгөө хүн нь энэ кодыг оруулаад холбогдсон даруйд энэ хэсэг ажиллаж, үндсэн апп руу зэрэг оруулна.
-  var roomId = [S.pairCode, S.pairCode].sort().join('_'); // Эхлээд өөрийнхөө кодоор өрөө үүсгэнэ
-  if(typeof DB !== 'undefined') {
-    // Firebase дээр өрөөгөө бэлдэж тавих
-    DB.ref('rooms/' + S.pairCode).set({
-      creator: S.myName,
-      partner: "",
-      status: "waiting"
-    });
-
-    // Өрөөний төлөвийг амьдаар нь сонсох
-    DB.ref('rooms/' + S.pairCode).on('value', function(snap) {
-      var data = snap.val();
-      if(data && data.status === 'paired' && data.partner) {
-        S.partnerCode = S.pairCode; // Хамтрагчийн код нь үүнтэй ижил болно
-        save();
-        finishPairing();
-      }
-    });
-  }
+  if(!DB) return;
+  DB.ref('rooms/'+code).set({
+    creator:S.myName,
+    creatorCode:S.pairCode,
+    partner:'',
+    partnerCode:'',
+    status:'waiting',
+    created:Date.now()
+  });
+  DB.ref('rooms/'+code).on('value',function(snap){
+    var data=snap.val();
+    if(data&&data.status==='paired'&&data.partnerCode){
+      S.partnerCode=data.partnerCode;
+      S.partnerName=data.partner||'Хайрт';
+      save();
+      DB.ref('rooms/'+code).off();
+      finishPairing();
+      listenFirebase();
+    }
+  });
 }
 
 function joinWithCode(){
   var name=document.getElementById('pair-name').value.trim();
   var code=document.getElementById('join-code-inp').value.trim();
   if(!name||!code){alert('Нэр болон кодоо оруулна уу!');return;}
-  
-  S.myName=name; 
-  S.partnerCode=code; // Хамтрагчийн оруулсан код
-  if(!S.pairCode) S.pairCode=genCode(); // Өөрт код байхгүй бол үүсгэх
-  
-  var display = document.getElementById('my-code-display');
-  var box = document.getElementById('my-code-box');
-  if(display) display.textContent=S.pairCode;
-  if(box) box.style.display='block';
-  
-  save(); 
+  S.myName=name;
+  S.partnerCode=code;
+  if(!S.pairCode) S.pairCode=genCode();
+  save();
   initFirebase();
-
-  // МАШ ЧУХАЛ ЗАСВАР: Код оруулж байгаа хүн Firebase руу "Би холбогдлоо" гэдгээ мэдэгдэнэ
-  if(typeof DB !== 'undefined') {
-    DB.ref('rooms/' + code).update({
-      partner: S.myName,
-      status: "paired"
-    }).then(function() {
-      finishPairing(); // Амжилттай шинэчлэгдвэл шууд үндсэн апп руу орно
-    }).catch(function(err) {
-      alert("Холболт амжилтгүй. Кодоо зөв оруулсан эсэхээ шалгана уу.");
+  if(!DB){finishPairing();return;}
+  DB.ref('rooms/'+code).once('value').then(function(snap){
+    if(!snap.exists()){alert('Код олдсонгүй. Зөв кодоо оруулна уу!');return;}
+    DB.ref('rooms/'+code).update({
+      partner:S.myName,
+      partnerCode:S.pairCode,
+      status:'paired'
+    }).then(function(){
+      finishPairing();
+      listenFirebase();
     });
-  } else {
-    finishPairing();
-  }
+  });
 }
-
 function finishPairing(){
   var screen = document.getElementById('pair-screen');
   var app = document.getElementById('app');
@@ -1271,7 +1257,7 @@ function updateDays(){
   else document.getElementById('clock-milestone').textContent='Бид '+totalDays+' өдөр хамт байна! 🎉';
 }
 
-setInterval(uateDays,60000);
+setInterval(updateDays,60000);
 
 function setMood(level,emoji,msg){
   S.mood=level; S.moodEmoji=emoji; S.moodMsg=msg; save();
@@ -2066,7 +2052,7 @@ function addSchItem(){
   target[S.schDay].push({name:name,time:time,loc:loc||'—',c:schSelColor});
   save();renderSch();
   // Firebase рүү календарийн үйл явдлыг илгээх
-  if(dbRef) dbRef.child('events').set(SCH_EVENTS);
+if(dbRef) dbRef.child(S.schWho==='me'?'mySchedule':'partnerSchedule').set(S.schWho==='me'?S.mySchedule:S.partnerSchedule);
   
   document.getElementById('add-sch-modal').classList.remove('show');
   document.getElementById('sch-name-inp').value='';
