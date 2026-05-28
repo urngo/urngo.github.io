@@ -897,7 +897,7 @@ var S = JSON.parse(localStorage.getItem('kp2-state') || 'null') || {
   messages:[], wishes:[], memories:[],
   coupons:[{icon:'🏳️',name:'Миний зөв!',desc:'Ямар ч маргаан гарсан үед чиний зөвийг зөвшөөрөх эрх',total:2,left:2}],
   coupHist:[],
-  songs:[
+  songs:[],
     {title:'Kiss Me',artist:'Sixpence None the Richer',emoji:'💋',dur:210,url:''},
     {title:"Can't Help Falling in Love",artist:'Elvis Presley',emoji:'🌹',dur:183,url:''},
     {title:'A Thousand Years',artist:'Christina Perri',emoji:'🕊️',dur:285,url:''}
@@ -1995,212 +1995,237 @@ function adjCoup(i,d){
   save();renderCoupons();
 }
 function useCoup(i){
-  var c=S.coupons[i];if(c.left===0)return;
-  if(c.left!==999)c.left--;
-  var now=new Date();var t=now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
-  S.coupHist.unshift({icon:c.icon,name:c.name,time:t});
-  save();renderCoupons();floatHeart(c.icon);
-  if(dbRef) dbRef.child('coupons').set(S.coupons);
+  var c = S.coupons[i]; if(c.left === 0) return;
+  if(c.left !== 999) c.left--;
+  var now = new Date(); var t = now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0');
+  S.coupHist.unshift({icon: c.icon, name: c.name, time: t});
+  saveLocal(); renderCoupons(); if(typeof floatHeart === 'function') floatHeart(c.icon);
+  
+  if(DB && S.pairCode) {
+    var roomId = [S.pairCode, S.partnerCode].sort().join('_');
+    DB.ref('rooms/' + roomId + '/coupons').set(S.coupons);
+  }
 }
-function delCoup(i){if(!confirm('Купон устгах уу?'))return;S.coupons.splice(i,1);save();renderCoupons();}
-function showAddCouponModal(){document.getElementById('add-coup-modal').classList.add('show');}
+
+function delCoup(i){ if(!confirm('Купон устгах уу?')) return; S.coupons.splice(i, 1); saveLocal(); renderCoupons(); }
+function showAddCouponModal(){ document.getElementById('add-coup-modal').classList.add('show'); }
+
 function addCoupon(){
-  var icon=document.getElementById('coup-icon-inp').value.trim()||'🎁';
-  var name=document.getElementById('coup-name-inp').value.trim();
-  var desc=document.getElementById('coup-desc-inp').value.trim();
-  var cnt=parseInt(document.getElementById('coup-cnt-inp').value)||3;
-  if(!name){alert('Нэр оруулна уу');return;}
-  S.coupons.push({icon:icon,name:name,desc:desc,total:cnt===0?999:cnt,left:cnt===0?999:cnt});
-  save();renderCoupons();document.getElementById('add-coup-modal').classList.remove('show');
-  document.getElementById('coup-icon-inp').value='';
-  document.getElementById('coup-name-inp').value='';
-  document.getElementById('coup-desc-inp').value='';
-  // Firebase рүү купоныг илгээх
-  if(dbRef) dbRef.child('coupons').set(S.coupons);
+  var icon = document.getElementById('coup-icon-inp').value.trim() || '🎁';
+  var name = document.getElementById('coup-name-inp').value.trim();
+  var desc = document.getElementById('coup-desc-inp').value.trim();
+  var cnt = parseInt(document.getElementById('coup-cnt-inp').value) || 3;
+  if(!name){ alert('Нэр оруулна уу'); return; }
+  S.coupons.push({icon: icon, name: name, desc: desc, total: cnt === 0 ? 999 : cnt, left: cnt === 0 ? 999 : cnt});
+  saveLocal(); renderCoupons(); document.getElementById('add-coup-modal').classList.remove('show');
+  document.getElementById('coup-icon-inp').value = '';
+  document.getElementById('coup-name-inp').value = '';
+  document.getElementById('coup-desc-inp').value = '';
+  
+  if(DB && S.pairCode) {
+    var roomId = [S.pairCode, S.partnerCode].sort().join('_');
+    DB.ref('rooms/' + roomId + '/coupons').set(S.coupons);
+  }
 }
 
 // ══════════════════════════════════════════════════════════
-// SCHEDULE
+// SCHEDULE — Хичээлийн хуваарь
 // ══════════════════════════════════════════════════════════
-var schSelColor='#F4C0D1';
+var schSelColor = '#F4C0D1';
 function setSchWho(w){
-  S.schWho=w;save();
-  document.getElementById('sch-me-btn').classList.toggle('on',w==='me');
-  document.getElementById('sch-p-btn').classList.toggle('on',w==='partner');
+  S.schWho = w; saveLocal();
+  document.getElementById('sch-me-btn').classList.toggle('on', w === 'me');
+  document.getElementById('sch-p-btn').classList.toggle('on', w === 'partner');
   renderSch();
 }
-function setSchDay(btn,d){
-  document.querySelectorAll('#day-tabs .dtab').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');S.schDay=d;save();renderSch();
+function setSchDay(btn, d){
+  document.querySelectorAll('#day-tabs .dtab').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on'); S.schDay = d; saveLocal(); renderSch();
 }
 function renderSch(){
-  var data=(S.schWho==='me'?S.mySchedule:S.partnerSchedule)[S.schDay]||[];
-  var el=document.getElementById('sch-content');
-  if(!data.length){el.innerHTML='<div style="text-align:center;padding:24px;color:var(--text3);font-size:14px;font-weight:700;">Энэ өдөр хичээл байхгүй байна. Нэмэх товч дар.</div>';return;}
-  el.innerHTML=data.map(function(c,i){
-    return '<div class="sch-item"><div class="sch-dot" style="background:'+c.c+'"></div>'+
-      '<div class="sch-time">'+c.time+'</div>'+
-      '<div style="flex:1;"><div class="sch-name">'+c.name+'</div><div class="sch-loc">📍 '+c.loc+'</div></div>'+
-      '<button class="danger-btn" onclick="delSchItem('+i+')">×</button></div>';
+  var data = (S.schWho === 'me' ? S.mySchedule : S.partnerSchedule)[S.schDay] || [];
+  var el = document.getElementById('sch-content');
+  if(!data.length){ el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3);font-size:14px;font-weight:700;">Энэ өдөр хичээл байхгүй байна. Нэмэх товч дар.</div>'; return; }
+  el.innerHTML = data.map(function(c, i){
+    return '<div class="sch-item"><div class="sch-dot" style="background:' + c.c + '"></div>' +
+      '<div class="sch-time">' + c.time + '</div>' +
+      '<div style="flex:1;"><div class="sch-name">' + c.name + '</div><div class="sch-loc">📍 ' + c.loc + '</div></div>' +
+      '<button class="danger-btn" onclick="delSchItem(' + i + ')">×</button></div>';
   }).join('');
 }
-function showAddSchModal(){document.getElementById('add-sch-modal').classList.add('show');}
-function setSchColor(c,el){schSelColor=c;document.querySelectorAll('#sch-color-pick .cpk').forEach(e=>e.classList.remove('on'));el.classList.add('on');}
+function showAddSchModal(){ document.getElementById('add-sch-modal').classList.add('show'); }
+function setSchColor(c, el){ schSelColor = c; document.querySelectorAll('#sch-color-pick .cpk').forEach(e => e.classList.remove('on')); el.classList.add('on'); }
+
 function addSchItem(){
-  var name=document.getElementById('sch-name-inp').value.trim();
-  var time=document.getElementById('sch-time-inp').value.trim();
-  var loc=document.getElementById('sch-loc-inp').value.trim();
-  if(!name||!time){alert('Нэр болон цагийг оруулна уу');return;}
-  var target=S.schWho==='me'?S.mySchedule:S.partnerSchedule;
-  if(!target[S.schDay])target[S.schDay]=[];
-  target[S.schDay].push({name:name,time:time,loc:loc||'—',c:schSelColor});
-  save();renderSch();
-  // Firebase рүү календарийн үйл явдлыг илгээх
-if(dbRef) dbRef.child(S.schWho==='me'?'mySchedule':'partnerSchedule').set(S.schWho==='me'?S.mySchedule:S.partnerSchedule);
+  var name = document.getElementById('sch-name-inp').value.trim();
+  var time = document.getElementById('sch-time-inp').value.trim();
+  var loc = document.getElementById('sch-loc-inp').value.trim();
+  if(!name || !time){ alert('Нэр болон цагийг оруулна уу'); return; }
+  var target = S.schWho === 'me' ? S.mySchedule : S.partnerSchedule;
+  if(!target[S.schDay]) target[S.schDay] = [];
+  target[S.schDay].push({name: name, time: time, loc: loc || '—', c: schSelColor});
+  saveLocal(); renderSch();
+  
+  if(DB && S.pairCode) {
+    var roomId = [S.pairCode, S.partnerCode].sort().join('_');
+    var path = S.schWho === 'me' ? 'mySchedule' : 'partnerSchedule';
+    DB.ref('rooms/' + roomId + '/' + path).set(target);
+  }
   
   document.getElementById('add-sch-modal').classList.remove('show');
-  document.getElementById('sch-name-inp').value='';
-  document.getElementById('sch-time-inp').value='';
-  document.getElementById('sch-loc-inp').value='';
+  document.getElementById('sch-name-inp').value = '';
+  document.getElementById('sch-time-inp').value = '';
+  document.getElementById('sch-loc-inp').value = '';
 }
 function delSchItem(i){
-  var target=S.schWho==='me'?S.mySchedule:S.partnerSchedule;
-  target[S.schDay].splice(i,1);save();renderSch();
+  var target = S.schWho === 'me' ? S.mySchedule : S.partnerSchedule;
+  target[S.schDay].splice(i, 1); saveLocal(); renderSch();
+  if(DB && S.pairCode) {
+    var roomId = [S.pairCode, S.partnerCode].sort().join('_');
+    var path = S.schWho === 'me' ? 'mySchedule' : 'partnerSchedule';
+    DB.ref('rooms/' + roomId + '/' + path).set(target);
+  }
 }
 
 // ══════════════════════════════════════════════════════════
-// CANVAS
+// CANVAS — Хамтран зурах талбар
 // ══════════════════════════════════════════════════════════
-var canvasColor='#e74c3c', canvasDrawing=false, lastX=0, lastY=0;
+var canvasColor = '#e74c3c', canvasDrawing = false, lastX = 0, lastY = 0;
 function initCanvas(){
-  var canvas=document.getElementById('shared-canvas');
-  canvas.width=canvas.offsetWidth||350;
-  var ctx=canvas.getContext('2d');
+  var canvas = document.getElementById('shared-canvas');
+  if(!canvas) return;
+  canvas.width = canvas.offsetWidth || 350;
+  var ctx = canvas.getContext('2d');
   function getPos(e){
-    var r=canvas.getBoundingClientRect();
-    var src=e.touches?e.touches[0]:e;
-    return{x:src.clientX-r.left,y:src.clientY-r.top};
+    var r = canvas.getBoundingClientRect();
+    var src = e.touches ? e.touches[0] : e;
+    return {x: src.clientX - r.left, y: src.clientY - r.top};
   }
-  function startDraw(e){e.preventDefault();canvasDrawing=true;var p=getPos(e);lastX=p.x;lastY=p.y;}
+  function startDraw(e){ e.preventDefault(); canvasDrawing = true; var p = getPos(e); lastX = p.x; lastY = p.y; }
   function draw(e){
-    if(!canvasDrawing)return;e.preventDefault();
-    var p=getPos(e);
-    ctx.beginPath();ctx.moveTo(lastX,lastY);ctx.lineTo(p.x,p.y);
-    ctx.strokeStyle=canvasColor;ctx.lineWidth=parseInt(document.getElementById('brush-size').value)||5;
-    ctx.lineCap='round';ctx.stroke();
-    lastX=p.x;lastY=p.y;
-    if(DB&&S.pairCode){
-      var roomId=[S.pairCode,S.partnerCode].sort().join('_');
-      var stroke={x1:lastX,y1:lastY,x2:p.x,y2:p.y,color:canvasColor,w:parseInt(document.getElementById('brush-size').value)||5,by:S.myName};
-      DB.ref('rooms/'+roomId+'/canvas').push(stroke);
+    if(!canvasDrawing) return; e.preventDefault();
+    var p = getPos(e);
+    ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(p.x, p.y);
+    ctx.strokeStyle = canvasColor; ctx.lineWidth = parseInt(document.getElementById('brush-size').value) || 5;
+    ctx.lineCap = 'round'; ctx.stroke();
+    lastX = p.x; lastY = p.y;
+    if(DB && S.pairCode){
+      var roomId = [S.pairCode, S.partnerCode].sort().join('_');
+      var stroke = {x1: lastX, y1: lastY, x2: p.x, y2: p.y, color: canvasColor, w: parseInt(document.getElementById('brush-size').value) || 5, by: S.myName};
+      DB.ref('rooms/' + roomId + '/canvas').push(stroke);
     }
   }
-  function endDraw(){canvasDrawing=false;}
-  canvas.addEventListener('mousedown',startDraw);canvas.addEventListener('mousemove',draw);canvas.addEventListener('mouseup',endDraw);
-  canvas.addEventListener('touchstart',startDraw,{passive:false});canvas.addEventListener('touchmove',draw,{passive:false});canvas.addEventListener('touchend',endDraw);
-  // Listen partner strokes
-  if(DB&&S.pairCode){
-    var roomId=[S.pairCode,S.partnerCode].sort().join('_');
-    DB.ref('rooms/'+roomId+'/canvas').limitToLast(200).on('child_added',function(snap){
-      var s=snap.val();if(s.by===S.myName)return;
-      ctx.beginPath();ctx.moveTo(s.x1,s.y1);ctx.lineTo(s.x2,s.y2);
-      ctx.strokeStyle=s.color;ctx.lineWidth=s.w;ctx.lineCap='round';ctx.stroke();
+  function endDraw(){ canvasDrawing = false; }
+  canvas.addEventListener('mousedown', startDraw); canvas.addEventListener('mousemove', draw); canvas.addEventListener('mouseup', endDraw);
+  canvas.addEventListener('touchstart', startDraw, {passive: false}); canvas.addEventListener('touchmove', draw, {passive: false}); canvas.addEventListener('touchend', endDraw);
+  
+  if(DB && S.pairCode){
+    var roomId = [S.pairCode, S.partnerCode].sort().join('_');
+    DB.ref('rooms/' + roomId + '/canvas').limitToLast(200).on('child_added', function(snap){
+      var s = snap.val(); if(s.by === S.myName) return;
+      ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2);
+      ctx.strokeStyle = s.color; ctx.lineWidth = s.w; ctx.lineCap = 'round'; ctx.stroke();
     });
   }
 }
-etCanvasColor(c,el){canvasColor=c;document.querySelectorAll('#canvas-colors .cpk').forEach(e=>e.classList.remove('on'));el.classList.add('on');}
-function clearCanvas(){document.getElementById('shared-canvas').getContext('2d').clearRect(0,0,9999,9999);}
+function setCanvasColor(c, el){ canvasColor = c; document.querySelectorAll('#canvas-colors .cpk').forEach(e => e.classList.remove('on')); el.classList.add('on'); }
+function clearCanvas(){ 
+  var canvas = document.getElementById('shared-canvas');
+  if(canvas) canvas.getContext('2d').clearRect(0, 0, 9999, 9999); 
+}
 
 // ══════════════════════════════════════════════════════════
 // SETTINGS
 // ══════════════════════════════════════════════════════════
-function showDateSetup(){document.getElementById('date-modal').classList.add('show');}
+function showDateSetup(){ if(document.getElementById('date-modal')) document.getElementById('date-modal').classList.add('show'); }
 function saveSettings(){
-  var d=document.getElementById('start-date-inp').value;
-  var n=document.getElementById('myname-inp').value.trim();
-  var pn=document.getElementById('partnername-inp').value.trim();
-  if(d)S.startDate=d;if(n)S.myName=n;if(pn)S.partnerName=pn;
-  save();updateUI();document.getElementById('date-modal').classList.remove('show');
-  updateDays();
+  var d = document.getElementById('start-date-inp').value;
+  var n = document.getElementById('myname-inp').value.trim();
+  var pn = document.getElementById('partnername-inp').value.trim();
+  if(d) S.startDate = d; if(n) S.myName = n; if(pn) S.partnerName = pn;
+  saveLocal(); updateUI(); document.getElementById('date-modal').classList.remove('show');
+  if(typeof updateDays === 'function') updateDays();
 }
 function updateUI(){
-  document.getElementById('drawer-myname').textContent=S.myName||'Нэр тохируулаагүй';
-  document.getElementById('drawer-pairinfo').textContent=S.pairCode?('Код: '+S.pairCode+(S.partnerCode?'  |  Хайрт: '+S.partnerName:'')):'Холбогдоогүй';
-  document.getElementById('chat-partner-name').textContent=S.partnerName||'Хайрт';
-  document.getElementById('myname-inp').value=S.myName||'';
-  document.getElementById('partnername-inp').value=S.partnerName||'';
-  if(S.startDate)document.getElementById('start-date-inp').value=S.startDate;
-  document.getElementById('home-since-txt').textContent=S.startDate?(S.startDate+' — Дарж өөрчлөх'):'Дарж огноо тохируулах';
+  if(document.getElementById('drawer-myname')) document.getElementById('drawer-myname').textContent = S.myName || 'Нэр тохируулаагүй';
+  if(document.getElementById('drawer-pairinfo')) document.getElementById('drawer-pairinfo').textContent = S.pairCode ? ('Код: ' + S.pairCode + (S.partnerCode ? '  |  Хайрт: ' + S.partnerName : '')) : 'Холбогдоогүй';
+  if(document.getElementById('chat-partner-name')) document.getElementById('chat-partner-name').textContent = S.partnerName || 'Хайрт';
+  if(document.getElementById('myname-inp')) document.getElementById('myname-inp').value = S.myName || '';
+  if(document.getElementById('partnername-inp')) document.getElementById('partnername-inp').value = S.partnerName || '';
+  if(S.startDate && document.getElementById('start-date-inp')) document.getElementById('start-date-inp').value = S.startDate;
+  if(document.getElementById('home-since-txt')) document.getElementById('home-since-txt').textContent = S.startDate ? (S.startDate + ' — Дарж өөрчлөх') : 'Дарж огноо тохируулах';
 }
 
 // ══════════════════════════════════════════════════════════
 // PWA + NOTIF
 // ══════════════════════════════════════════════════════════
 var dpp;
-window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dpp=e;});
+window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); dpp = e; });
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 
 // ══════════════════════════════════════════════════════════
-// INIT
+// INIT — Апп ачаалах үндсэн хэсэг
 // ══════════════════════════════════════════════════════════
-window.addEventListener('load',function(){
-  setPengImages();
+window.addEventListener('load', function(){
+  if(typeof setPengImages === 'function') setPengImages();
   setTimeout(function(){
-    document.getElementById('splash').classList.add('out');
-    if(!S.pairCode&&!S.partnerCode){
-      document.getElementById('pair-screen').style.display='flex';
-      // also allow skip pairing
+    if(document.getElementById('splash')) document.getElementById('splash').classList.add('out');
+    if(!S.pairCode && !S.partnerCode){
+      if(document.getElementById('pair-screen')) document.getElementById('pair-screen').style.display = 'flex';
       setTimeout(function(){
-        if(!S.pairCode){
-          var skip=document.createElement('button');
-          skip.textContent='Одоохондоо дараарай →';
-          skip.style.cssText='margin-top:12px;background:none;border:none;color:var(--text3);font-size:13px;font-weight:700;cursor:pointer;width:100%;';
-          skip.onclick=function(){
-            document.getElementById('pair-screen').style.display='none';
-            document.getElementById('app').style.opacity='1';
+        if(!S.pairCode && document.getElementById('pair-box')){
+          var skip = document.createElement('button');
+          skip.textContent = 'Одоохондоо дараарай →';
+          skip.style.cssText = 'margin-top:12px;background:none;border:none;color:var(--text3);font-size:13px;font-weight:700;cursor:pointer;width:100%;';
+          skip.onclick = function(){
+            document.getElementById('pair-screen').style.display = 'none';
+            document.getElementById('app').style.opacity = '1';
           };
           document.getElementById('pair-box').appendChild(skip);
         }
-      },100);
+      }, 100);
     } else {
-      document.getElementById('app').style.opacity='1';
-      initFirebase();
+      if(document.getElementById('app')) document.getElementById('app').style.opacity = '1';
+      if(typeof listenFirebase === 'function') listenFirebase();
     }
-  },2200);
-  updateDays(); updateUI(); renderMsgs(); renderWishes(); renderMems();
-  renderCoupons(); renderPlaylist(); updatePlayer(); renderSch(); renderLocHist();
-  var piv=document.getElementById('period-inp');
-  if(!piv.value){var d=new Date();d.setDate(14);piv.value=d.toISOString().split('T')[0];}
-  renderCal();
-  setTimeout(initCanvas,500);
-  if(Notification&&Notification.permission==='default')setTimeout(()=>Notification.requestPermission(),3000);
-  setInterval(updateDays,60000);
-  // Daily Q preview
-  var dqi=Math.floor(Date.now()/86400000)%DQ_LIST.length;
-  document.getElementById('dq-preview').textContent='❓ '+DQ_LIST[dqi].substring(0,28)+'...';
-  // Tamagotchi: update UI and decay every 5 minutes
-  updateTamaUI();
-  setInterval(updateTamaUI, 300000);
-  // Nudge: if not opened in 2 days
-  var lastOpen=parseInt(localStorage.getItem('kp-lastopen')||'0');
-  if(Date.now()-lastOpen>172800000&&lastOpen>0){
-    if(Notification&&Notification.permission==='granted')
-      new Notification('🐧 Kiss Ping',{body:'Бид хоёулаа нэлээд хугацаа болж байна... хайртайдаа зүрх иглэ! 💕'});
+  }, 2200);
+
+  if(typeof updateDays === 'function') updateDays(); 
+  updateUI(); 
+  if(typeof renderMsgs === 'function') renderMsgs(); 
+  if(typeof renderWishes === 'function') renderWishes(); 
+  if(typeof renderMems === 'function') renderMems();
+  if(typeof renderCoupons === 'function') renderCoupons(); 
+  if(typeof renderPlaylist === 'function') renderPlaylist(); 
+  if(typeof updatePlayer === 'function') updatePlayer(); 
+  renderSch(); 
+  if(typeof renderLocHist === 'function') renderLocHist();
+  
+  var piv = document.getElementById('period-inp');
+  if(piv && !piv.value){ var d = new Date(); d.setDate(14); piv.value = d.toISOString().split('T')[0]; }
+  if(typeof renderCal === 'function') renderCal();
+  setTimeout(initCanvas, 500);
+  
+  if(window.Notification && Notification.permission === 'default') setTimeout(() => Notification.requestPermission(), 3000);
+  if(typeof updateDays === 'function') setInterval(updateDays, 60000);
+  
+  if(typeof DQ_LIST !== 'undefined' && DQ_LIST.length && document.getElementById('dq-preview')){
+    var dqi = Math.floor(Date.now() / 86400000) % DQ_LIST.length;
+    document.getElementById('dq-preview').textContent = '❓ ' + DQ_LIST[dqi].substring(0, 28) + '...';
   }
-  localStorage.setItem('kp-lastopen',Date.now());
-});
-<div id="app"></div>
-
-    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
-
-    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-database.js"></script>
- 
   
-</script>
-    localStorage.setItem('kp-lastopen',Date.now());
-});
-
-</script>
+  if(typeof updateTamaUI === 'function') {
+    updateTamaUI();
+    setInterval(updateTamaUI, 300000);
+  }
   
+  var lastOpen = parseInt(localStorage.getItem('kp-lastopen') || '0');
+  if(Date.now() - lastOpen > 172800000 && lastOpen > 0){
+    if(window.Notification && Notification.permission === 'granted')
+      new Notification('🐧 Kiss Ping', {body: 'Бид хоёулаа нэлээд хугацаа болж байна... хайртайдаа зүрх илгээ! 💕'});
+  }
+  localStorage.setItem('kp-lastopen', Date.now());
+});
+</script>
 </body>
 </html>
