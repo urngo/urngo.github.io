@@ -922,95 +922,95 @@ function initFirebase(){
 }
 
 function listenFirebase(){
-  // 1. Идэвхтэй бааз эсвэл өрөөний код (S.roomCode) байхгүй бол буцна
-if(!DB || !S.pairCode) return;
+  // ЗАСВАР 1: Байхгүй S.roomCode шалгалтыг устгаж, холболтод шаардлагатай кодуудыг шалгана
+  if(!DB || !S.pairCode || !S.partnerCode) return;
   
- // Хоёр хэрэглэгчийн кодоор дундын ганц өрөөний ID үүсгэх
-var roomId = [S.pairCode, S.partnerCode].sort().join('_');
-dbRef = DB.ref('rooms/' + roomId);
-  // 1. Мессежүүдийг шууд сонсох (Дундын өрөнөөс)
+  var roomId = getRoomId(); // Хоёр талын кодоор эрэмбэлж дундын өрөөний ID үүсгэх
+  dbRef = DB.ref('rooms/' + roomId);
+
+  // 1. Мессежүүдийг дундын өрөөнөөс Realtime сонсох
   dbRef.child('messages').limitToLast(100).on('value', snap=>{
-    if(!snap.exists()) return;
+    if(!snap.exists()) {
+      S.messages = [];
+      renderMsgs();
+      return;
+    }
     S.messages = Object.values(snap.val()||{});
-    // Төгсгөлгүй давталтаас сэргийлж зөвхөн локал санах ойд хадгална
     localStorage.setItem('kp2-state', JSON.stringify(S));
     renderMsgs();
   });
 
-  // 2. Дундын өрөөн дээрх датаг шууд сонсох
+  // 2. Дундын өрөөн дээрх бусад датаг шууд сонсох (Хүсэл, Купон, Тамагочи, Хөгжим)
   dbRef.on('value', snap=>{
     if(!snap.exists()) return;
     var data = snap.val();
     
-    // А. Хүсэл, Дурсамж, Купон
     if(data.wishes) { S.wishes = data.wishes; renderWishes(); }
     if(data.memories) { S.memories = data.memories; renderMems(); }
     if(data.coupons) { S.coupons = data.coupons; renderCoupons(); }
     
-    // Б. Календарийн хуваарь
     if(data.mySchedule) { S.mySchedule = data.mySchedule; }
     if(data.partnerSchedule) { S.partnerSchedule = data.partnerSchedule; }
-    renderCal(); 
-    renderSch();
+    if(typeof renderCal === 'function') renderCal(); 
+    if(typeof renderSch === 'function') renderSch();
     
-    // В. Тамагочи Пингвиний төлөв
-  if(data.tama) {
-  S.tamaHappy = data.tama.happy;
-  S.tamaFood = data.tama.food || data.tama.hunger || S.tamaFood;
-  S.tamaWater = data.tama.water || data.tama.thirst || S.tamaWater;
+    if(data.tama) {
+      S.tamaHappy = data.tama.happy;
+      S.tamaFood = data.tama.food || data.tama.hunger || S.tamaFood;
+      S.tamaWater = data.tama.water || data.tama.thirst || S.tamaWater;
+      if(typeof updateTamaUI === 'function') updateTamaUI();
     }
 
-    // Г. Хөгжмийн плейлист болон Тоглуулагчийн төлөв
     if(data.songs) { 
       S.songs = data.songs; 
-      renderPlaylist(); 
+      if(typeof renderPlaylist === 'function') renderPlaylist(); 
     }
     if(data.musicState) {
       if(S.curSong !== data.musicState.curSong || S.isPlaying !== data.musicState.isPlaying) {
         S.curSong = data.musicState.curSong;
         S.isPlaying = data.musicState.isPlaying;
-        updatePlayer();
+        if(typeof updatePlayer === 'function') updatePlayer();
       }
     }
-    
-    // ЗАСВАР: Төгсгөлгүй давталтаас сэргийлж зөвхөн localStorage руу хадгална
     localStorage.setItem('kp2-state', JSON.stringify(S));
   });
 
-  // 3. Хамтрагчийн хувийн төлөвүүдийг сонсох
- // Хамтрагчийн хувийн төлөвийг сонсох (S.roomCode-ийг S.partnerCode болгоно)
-dbRef.child('users/' + S.partnerCode).on('value', snap=>{
+  // 3. ЗАСВАР 2: Хамтрагчийн хувийн төлөвийг дундын өрөөний users сувгаас зөв хаягаар сонсох
+  dbRef.child('users/' + S.partnerCode).on('value', snap=>{
     if(!snap.exists()) return;
     var pd = snap.val();
     updatePartnerOnline(pd.online);
-    if(pd.mood) { document.getElementById('chat-partner-status').textContent = pd.mood; }
-    if(pd.loc) showPartnerLoc(pd.loc);
+    if(pd.mood) { 
+      var el = document.getElementById('chat-partner-status');
+      if(el) el.textContent = pd.mood; 
+    }
+    if(pd.loc && typeof showPartnerLoc === 'function') showPartnerLoc(pd.loc);
     if(pd.dqAnswer) {
       S.dqPartnerAnswer = pd.dqAnswer;
-      document.getElementById('dq-partner-answer').textContent = pd.dqAnswer;
-      document.getElementById('dq-reveal-box').classList.add('show');
+      var ansEl = document.getElementById('dq-partner-answer');
+      var revEl = document.getElementById('dq-reveal-box');
+      if(ansEl) ansEl.textContent = pd.dqAnswer;
+      if(revEl) revEl.classList.add('show');
     }
-    if(pd.secretMsg) showIncomingSecret(pd.secretMsg);
+    if(pd.secretMsg && typeof showIncomingSecret === 'function') showIncomingSecret(pd.secretMsg);
     
-    // Хамтрагч дуу хуваалцах товч дарах үед
     if(pd.nowPlaying && pd.nowPlaying.ts && (Date.now()-pd.nowPlaying.ts)<300000) {
-      showPartnerMusic(pd.nowPlaying);
+      if(typeof showPartnerMusic === 'function') showPartnerMusic(pd.nowPlaying);
     } else {
       var pmb = document.getElementById('partner-music-box');
       if(pmb) pmb.style.display='none';
     }
   });
 
-  // 4. Зүрхэн пинг (Heart Ping) шууд сонсох
+  // 4. Зүрхэн пин (Heart Ping) шууд сонсох
   dbRef.child('heartPing').on('value', snap=>{
     if(!snap.exists()) return;
     var hp = snap.val();
     if(hp && hp.from && hp.from !== S.myName && hp.time && (Date.now()-hp.time)<30000){
-      showIncomingHeartPing(hp.from);
+      if(typeof showIncomingHeartPing === 'function') showIncomingHeartPing(hp.from);
     }
   });
 
-  // Холболтын төлөвийг UI дээр ногооноор харуулах хэсэг (Нэмэлт)
   fbReady = true;
   var connEl = document.getElementById('d-conn');
   if(connEl) {
@@ -1023,8 +1023,8 @@ dbRef.child('users/' + S.partnerCode).on('value', snap=>{
 }
   
 function setOnline(on){
-  if(!DB||!S.pairCode) return;
-  var roomId=[S.pairCode,S.partnerCode].sort().join('_');
+  if(!DB||!S.pairCode||!S.partnerCode) return;
+  var roomId = getRoomId();
   DB.ref('rooms/'+roomId+'/users/'+S.pairCode).update({
     online:on, name:S.myName,
     mood:S.moodMsg||'', lastSeen:Date.now()
@@ -1032,27 +1032,27 @@ function setOnline(on){
 }
 
 function sendFirebaseMsg(msgObj){
-  if(!DB||!S.pairCode) return;
-  var roomId=[S.pairCode,S.partnerCode].sort().join('_');
+  if(!DB||!S.pairCode||!S.partnerCode) return;
+  var roomId = getRoomId();
   DB.ref('rooms/'+roomId+'/messages').push(msgObj);
 }
 
 function sendFirebaseLoc(locObj){
-  if(!DB||!S.pairCode) return;
-  var roomId=[S.pairCode,S.partnerCode].sort().join('_');
+  if(!DB||!S.pairCode||!S.partnerCode) return;
+  var roomId = getRoomId();
   DB.ref('rooms/'+roomId+'/users/'+S.pairCode).update({loc:locObj});
 }
 
 function syncWishes(){
-  if(!DB||!S.pairCode) return;
-  var roomId=[S.pairCode,S.partnerCode].sort().join('_');
-  DB.ref('rooms/'+roomId+'/users/'+S.pairCode).update({wishes:S.wishes});
+  if(!DB||!S.pairCode||!S.partnerCode) return;
+  var roomId = getRoomId();
+  DB.ref('rooms/'+roomId).update({wishes:S.wishes});
 }
 
 function syncMems(){
-  if(!DB||!S.pairCode) return;
-  var roomId=[S.pairCode,S.partnerCode].sort().join('_');
-  DB.ref('rooms/'+roomId+'/users/'+S.pairCode).update({memories:S.memories});
+  if(!DB||!S.pairCode||!S.partnerCode) return;
+  var roomId = getRoomId();
+  DB.ref('rooms/'+roomId).update({memories:S.memories});
 }
 
 function updatePartnerOnline(on){
@@ -1622,7 +1622,8 @@ function renderCal(){
 // ══════════════════════════════════════════════════════════
 function renderWishes(){
   var el=document.getElementById('wish-list');
-  if(!S.wishes.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);font-size:14px;font-weight:700;">Доор нэмж эхэлнэ үү!</div>';return;}
+  if(!el) return;
+  if(!S.wishes || !S.wishes.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);font-size:14px;font-weight:700;">Доор нэмж эхэлнэ үү!</div>';return;}
   el.innerHTML=S.wishes.map(function(w,i){
     return '<div class="wish-item'+(w.done?' done':'')+'">'+
       '<div class="wchk'+(w.done?' on':'')+'" onclick="toggleWish('+i+')"><span style="color:#fff;font-size:11px;font-weight:800;">'+(w.done?'✓':'')+'</span></div>'+
@@ -1630,46 +1631,35 @@ function renderWishes(){
       '<button class="del-x" onclick="delWish('+i+')">×</button></div>';
   }).join('');
 }
+
 function toggleWish(i){
+  if(!S.wishes[i]) return;
   S.wishes[i].done = !S.wishes[i].done;
   save();
   syncWishes();
   renderWishes();
-  if(S.wishes[i].done) floatHeart('🌟');
-  
-  // ЭНЭ МӨРИЙГ НЭМЖ БАЙНА: Firebase-ийн дундын бааз руу шинэ төлөвийг илгээх
-  if(dbRef) dbRef.child('wishes').set(S.wishes);
 }
+
 function delWish(i){
   if(!confirm('Устгах уу?')) return;
   S.wishes.splice(i,1);
   save();
   syncWishes();
   renderWishes();
-  
-  // ЭНЭ МӨРИЙГ НЭМЖ БАЙНА: Баазаас устгагдсан шинэ жагсаалтыг Firebase руу илгээх
-  if(dbRef) dbRef.child('wishes').set(S.wishes);
 }
+
 function addWish(){
   var inp = document.getElementById('wish-inp');
+  if(!inp) return;
   var txt = inp.value.trim();
   if(!txt) return;
-
-  // 1. Локал санах ойн жагсаалтад нэмэх (Бүтэц нь title байх ёстой)
-  S.wishes.push({ title: txt, done: false });
-  
-  // 2. Утасны дотоод санах ойд хадгалах, дэлгэцийг шинэчлэх
-  save(); 
-  inp.value = ''; 
-  renderWishes(); 
-  floatHeart('🌟');
-  
-  // 3. ЖИНХЭНЭ ШИЙДЭЛ: Firebase-ийн дундын өрөө рүү шууд илгээх
-  if(dbRef) {
-    dbRef.child('wishes').set(S.wishes);
-  }
+  if(!S.wishes) S.wishes = [];
+  S.wishes.push({text:txt, done:false, ts:Date.now()});
+  inp.value = '';
+  save();
+  syncWishes();
+  renderWishes();
 }
-
 // ══════════════════════════════════════════════════════════
 // MEMORIES
 // ══════════════════════════════════════════════════════════
