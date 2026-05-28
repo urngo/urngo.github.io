@@ -1101,7 +1101,7 @@ function showIncomingHeartPing(fromName){
 }
 
 // ══════════════════════════════════════════════════════════
-// PAIR SETUP
+// PAIR SETUP — ЗАСАЖ ТӨГС БОЛГОСОН ХУВИЛБАР
 // ══════════════════════════════════════════════════════════
 function genCode(){return Math.floor(100000+Math.random()*900000).toString();}
 
@@ -1118,8 +1118,29 @@ function createPairCode(){
   if(display) display.textContent=code;
   if(input) input.disabled=true;
   
-  // Өөрийн кодыг үүсгээд Firebase-д бэлэн болгох
   initFirebase();
+  
+  // МAШ ЧУХАЛ ЗАСВАР: Код үүсгэсэн хүн өөрийнхөө өрөөг Firebase дээр сонсож эхэлнэ.
+  // Нөгөө хүн нь энэ кодыг оруулаад холбогдсон даруйд энэ хэсэг ажиллаж, үндсэн апп руу зэрэг оруулна.
+  var roomId = [S.pairCode, S.pairCode].sort().join('_'); // Эхлээд өөрийнхөө кодоор өрөө үүсгэнэ
+  if(typeof DB !== 'undefined') {
+    // Firebase дээр өрөөгөө бэлдэж тавих
+    DB.ref('rooms/' + S.pairCode).set({
+      creator: S.myName,
+      partner: "",
+      status: "waiting"
+    });
+
+    // Өрөөний төлөвийг амьдаар нь сонсох
+    DB.ref('rooms/' + S.pairCode).on('value', function(snap) {
+      var data = snap.val();
+      if(data && data.status === 'paired' && data.partner) {
+        S.partnerCode = S.pairCode; // Хамтрагчийн код нь үүнтэй ижил болно
+        save();
+        finishPairing();
+      }
+    });
+  }
 }
 
 function joinWithCode(){
@@ -1129,7 +1150,6 @@ function joinWithCode(){
   
   S.myName=name; 
   S.partnerCode=code; // Хамтрагчийн оруулсан код
-  
   if(!S.pairCode) S.pairCode=genCode(); // Өөрт код байхгүй бол үүсгэх
   
   var display = document.getElementById('my-code-display');
@@ -1138,7 +1158,21 @@ function joinWithCode(){
   if(box) box.style.display='block';
   
   save(); 
-  finishPairing();
+  initFirebase();
+
+  // МАШ ЧУХАЛ ЗАСВАР: Код оруулж байгаа хүн Firebase руу "Би холбогдлоо" гэдгээ мэдэгдэнэ
+  if(typeof DB !== 'undefined') {
+    DB.ref('rooms/' + code).update({
+      partner: S.myName,
+      status: "paired"
+    }).then(function() {
+      finishPairing(); // Амжилттай шинэчлэгдвэл шууд үндсэн апп руу орно
+    }).catch(function(err) {
+      alert("Холболт амжилтгүй. Кодоо зөв оруулсан эсэхээ шалгана уу.");
+    });
+  } else {
+    finishPairing();
+  }
 }
 
 function finishPairing(){
@@ -1150,11 +1184,8 @@ function finishPairing(){
   
   if(typeof updateUI === 'function') updateUI(); 
   
-  // Холболт хийгдсэний дараа Firebase-ийг эхлүүлж, сонсож эхлэх
   initFirebase(); 
   if(typeof listenFirebase === 'function') listenFirebase();
-  
-  // Онлайн төлөвийг шууд илгээх
   if(typeof setOnline === 'function') setOnline(true);
 }
 
