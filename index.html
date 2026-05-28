@@ -856,7 +856,7 @@ html,body{height:100%;overflow:hidden;font-family:'Nunito',sans-serif;background
   </div>
 </div>
 
-<script>
+pd<script>
 // ══════════════════════════════════════════════════════════
 // FIREBASE CONFIG — Хэрэглэгч өөрийн config-оо оруулна
 // ══════════════════════════════════════════════════════════
@@ -871,7 +871,7 @@ const firebaseConfig = {
   appId: "1:763351888123:web:c031a310bd172e3b22005e",
   measurementId: "G-0KGBTMM6FX"
 };
-
+const STORAGE_KEY = 'kp2-state';
 // ══════════════════════════════════════════════════════════
 // LOCAL STATE (localStorage fallback when not paired)
 // ══════════════════════════════════════════════════════════
@@ -904,8 +904,12 @@ function save(){localStorage.setItem('kp2-state',JSON.stringify(S));}
 // ══════════════════════════════════════════════════════════
 // FIREBASE REALTIME DB (хэрэглэгч холбосон үед)
 // ══════════════════════════════════════════════════════════
-var DB = null, dbRef = null, partnerRef = null, isFirebaseReady = false;
+var DB = null, dbRef = null, isFirebaseReady = false, fbReady = false;
 
+function getRoomId() {
+  if(!S.pairCode || !S.partnerCode) return S.pairCode || 'single_room';
+  return [S.pairCode, S.partnerCode].sort().join('_');
+}
 function initFirebase(){
   try{
     if(typeof firebase === 'undefined') return;
@@ -917,18 +921,22 @@ function initFirebase(){
 }
 
 function listenFirebase(){
-  if(!DB || !S.pairCode) return;
-  var roomId = [S.pairCode, S.partnerCode].sort().join('_');
-  dbRef = DB.ref('rooms/'+roomId);
-
-  // 1. Мессежүүдийг шууд сонсох (Дундын өрөөнөөс)
+  // 1. Идэвхтэй бааз эсвэл өрөөний код (S.roomCode) байхгүй бол буцна
+  if(!DB || !S.roomCode) return;
+  
+ // Хоёр хэрэглэгчийн кодоор дундын ганц өрөөний ID үүсгэх
+var roomId = [S.pairCode, S.partnerCode].sort().join('_');
+dbRef = DB.ref('rooms/' + roomId);
+  // 1. Мессежүүдийг шууд сонсох (Дундын өрөнөөс)
   dbRef.child('messages').limitToLast(100).on('value', snap=>{
     if(!snap.exists()) return;
     S.messages = Object.values(snap.val()||{});
-    save(); renderMsgs();
+    // Төгсгөлгүй давталтаас сэргийлж зөвхөн локал санах ойд хадгална
+    localStorage.setItem(''kp2-state', JSON.stringify(S)); 
+    renderMsgs();
   });
 
-  // 2. Дундын өрөөн дээрх датаг шууд сонсох (Хүсэл, Дурсамж, Купон, Хуваарь, Тамагочи, Хөгжим)
+  // 2. Дундын өрөөн дээрх датаг шууд сонсох
   dbRef.on('value', snap=>{
     if(!snap.exists()) return;
     var data = snap.val();
@@ -938,23 +946,20 @@ function listenFirebase(){
     if(data.memories) { S.memories = data.memories; renderMems(); }
     if(data.coupons) { S.coupons = data.coupons; renderCoupons(); }
     
-    // Б. Календарийн хуваарь (Чиний болон Хайртын хуваарийг зэрэг уншина)
+    // Б. Календарийн хуваарь
     if(data.mySchedule) { S.mySchedule = data.mySchedule; }
     if(data.partnerSchedule) { S.partnerSchedule = data.partnerSchedule; }
     renderCal(); 
     renderSch();
     
     // В. Тамагочи Пингвиний төлөв
-    if(data.tama) {
-      S.tamaHappy = data.tama.happy;
-      S.tamaHunger = data.tama.hunger;
-      S.tamaThirst = data.tama.thirst;
-      S.tamaEnergy = data.tama.energy;
-      S.tamaMood = data.tama.mood;
-      updateTamaUI();
+  if(data.tama) {
+  S.tamaHappy = data.tama.happy;
+  S.tamaFood = data.tama.food || data.tama.hunger || S.tamaFood;
+  S.tamaWater = data.tama.water || data.tama.thirst || S.tamaWater;
     }
 
-    // Г. Хөгжмийн плейлист болон Тоглуулагчийн төлөв (ШИНЭ!)
+    // Г. Хөгжмийн плейлист болон Тоглуулагчийн төлөв
     if(data.songs) { 
       S.songs = data.songs; 
       renderPlaylist(); 
@@ -967,11 +972,13 @@ function listenFirebase(){
       }
     }
     
-    save(); // Өөрчлөлтүүдийг утасны локал санах ойд давхар баталгаажуулах
+    // ЗАСВАР: Төгсгөлгүй давталтаас сэргийлж зөвхөн localStorage руу хадгална
+    localStorage.setItem('kp2-state', JSON.stringify(S));
   });
 
-  // 3. Хамтрагчийн хувийн төлөвүүдийг сонсох (Онлайн, Байршил, Шууд дуу хуваалцалт)
-  dbRef.child('users/'+S.partnerCode).on('value', snap=>{
+  // 3. Хамтрагчийн хувийн төлөвүүдийг сонсох
+ // Хамтрагчийн хувийн төлөвийг сонсох (S.roomCode-ийг S.partnerCode болгоно)
+dbRef.child('users/' + S.partnerCode).on('value', snap=>{
     if(!snap.exists()) return;
     var pd = snap.val();
     updatePartnerOnline(pd.online);
@@ -984,7 +991,7 @@ function listenFirebase(){
     }
     if(pd.secretMsg) showIncomingSecret(pd.secretMsg);
     
-    // Хамтрагч дуу хуваалцах товч дарах үед (Share Music)
+    // Хамтрагч дуу хуваалцах товч дарах үед
     if(pd.nowPlaying && pd.nowPlaying.ts && (Date.now()-pd.nowPlaying.ts)<300000) {
       showPartnerMusic(pd.nowPlaying);
     } else {
@@ -1002,7 +1009,14 @@ function listenFirebase(){
     }
   });
 
-  // Өөрийн онлайн төлвийг идэвхжүүлэх
+  // Холболтын төлөвийг UI дээр ногооноор харуулах хэсэг (Нэмэлт)
+  fbReady = true;
+  var connEl = document.getElementById('d-conn');
+  if(connEl) {
+    connEl.textContent = '✓ Firebase холбогдсон ● Live';
+    connEl.className = 'd-conn-status paired';
+  }
+
   setOnline(true);
   window.addEventListener('beforeunload',()=>setOnline(false));
 }
@@ -1094,26 +1108,53 @@ function createPairCode(){
   var name=document.getElementById('pair-name').value.trim();
   if(!name){alert('Нэрээ оруулна уу!');return;}
   S.myName=name; var code=genCode(); S.pairCode=code; save();
-  document.getElementById('my-code-box').style.display='block';
-  document.getElementById('my-code-display').textContent=code;
-  document.getElementById('pair-name').disabled=true;
+  
+  var box = document.getElementById('my-code-box');
+  var display = document.getElementById('my-code-display');
+  var input = document.getElementById('pair-name');
+  
+  if(box) box.style.display='block';
+  if(display) display.textContent=code;
+  if(input) input.disabled=true;
+  
+  // Өөрийн кодыг үүсгээд Firebase-д бэлэн болгох
+  initFirebase();
 }
 
 function joinWithCode(){
   var name=document.getElementById('pair-name').value.trim();
   var code=document.getElementById('join-code-inp').value.trim();
   if(!name||!code){alert('Нэр болон кодоо оруулна уу!');return;}
-  S.myName=name; S.partnerCode=code;
-  if(!S.pairCode) S.pairCode=genCode();
-  document.getElementById('my-code-display').textContent=S.pairCode;
-  document.getElementById('my-code-box').style.display='block';
-  save(); finishPairing();
+  
+  S.myName=name; 
+  S.partnerCode=code; // Хамтрагчийн оруулсан код
+  
+  if(!S.pairCode) S.pairCode=genCode(); // Өөрт код байхгүй бол үүсгэх
+  
+  var display = document.getElementById('my-code-display');
+  var box = document.getElementById('my-code-box');
+  if(display) display.textContent=S.pairCode;
+  if(box) box.style.display='block';
+  
+  save(); 
+  finishPairing();
 }
 
 function finishPairing(){
-  document.getElementById('pair-screen').style.display='none';
-  document.getElementById('app').style.opacity='1';
-  updateUI(); initFirebase(); listenFirebase();
+  var screen = document.getElementById('pair-screen');
+  var app = document.getElementById('app');
+  
+  if(screen) screen.style.display='none';
+  if(app) app.style.opacity='1';
+  
+  if(typeof updateUI === 'function') updateUI(); 
+  
+  // Холболт хийгдсэний дараа Firebase-ийг эхлүүлж, сонсож эхлэх
+  initFirebase(); 
+  if(typeof listenFirebase === 'function') listenFirebase();
+  
+  // Онлайн төлөвийг шууд илгээх
+  if(typeof setOnline === 'function') setOnline(true);
 }
 
 function resetPairing(){
@@ -1198,7 +1239,7 @@ function updateDays(){
   else document.getElementById('clock-milestone').textContent='Бид '+totalDays+' өдөр хамт байна! 🎉';
 }
 
-setInterval(updateDays,60000);
+setInterval(uateDays,60000);
 
 function setMood(level,emoji,msg){
   S.mood=level; S.moodEmoji=emoji; S.moodMsg=msg; save();
