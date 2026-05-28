@@ -920,13 +920,57 @@ function listenFirebase(){
   if(!DB || !S.pairCode) return;
   var roomId = [S.pairCode, S.partnerCode].sort().join('_');
   dbRef = DB.ref('rooms/'+roomId);
-  // Listen messages
+
+  // 1. Мессежүүдийг шууд сонсох (Дундын өрөөнөөс)
   dbRef.child('messages').limitToLast(100).on('value', snap=>{
     if(!snap.exists()) return;
     S.messages = Object.values(snap.val()||{});
     save(); renderMsgs();
   });
-  // Listen partner status
+
+  // 2. Дундын өрөөн дээрх датаг шууд сонсох (Хүсэл, Дурсамж, Купон, Хуваарь, Тамагочи, Хөгжим)
+  dbRef.on('value', snap=>{
+    if(!snap.exists()) return;
+    var data = snap.val();
+    
+    // А. Хүсэл, Дурсамж, Купон
+    if(data.wishes) { S.wishes = data.wishes; renderWishes(); }
+    if(data.memories) { S.memories = data.memories; renderMems(); }
+    if(data.coupons) { S.coupons = data.coupons; renderCoupons(); }
+    
+    // Б. Календарийн хуваарь (Чиний болон Хайртын хуваарийг зэрэг уншина)
+    if(data.mySchedule) { S.mySchedule = data.mySchedule; }
+    if(data.partnerSchedule) { S.partnerSchedule = data.partnerSchedule; }
+    renderCal(); 
+    renderSch();
+    
+    // В. Тамагочи Пингвиний төлөв
+    if(data.tama) {
+      S.tamaHappy = data.tama.happy;
+      S.tamaHunger = data.tama.hunger;
+      S.tamaThirst = data.tama.thirst;
+      S.tamaEnergy = data.tama.energy;
+      S.tamaMood = data.tama.mood;
+      updateTamaUI();
+    }
+
+    // Г. Хөгжмийн плейлист болон Тоглуулагчийн төлөв (ШИНЭ!)
+    if(data.songs) { 
+      S.songs = data.songs; 
+      renderPlaylist(); 
+    }
+    if(data.musicState) {
+      if(S.curSong !== data.musicState.curSong || S.isPlaying !== data.musicState.isPlaying) {
+        S.curSong = data.musicState.curSong;
+        S.isPlaying = data.musicState.isPlaying;
+        updatePlayer();
+      }
+    }
+    
+    save(); // Өөрчлөлтүүдийг утасны локал санах ойд давхар баталгаажуулах
+  });
+
+  // 3. Хамтрагчийн хувийн төлөвүүдийг сонсох (Онлайн, Байршил, Шууд дуу хуваалцалт)
   dbRef.child('users/'+S.partnerCode).on('value', snap=>{
     if(!snap.exists()) return;
     var pd = snap.val();
@@ -939,9 +983,8 @@ function listenFirebase(){
       document.getElementById('dq-reveal-box').classList.add('show');
     }
     if(pd.secretMsg) showIncomingSecret(pd.secretMsg);
-    if(pd.wishes) { S.wishes=pd.wishes; save(); renderWishes(); }
-    if(pd.memories) { S.memories=pd.memories; save(); renderMems(); }
-    // Music share: partner is sharing a song
+    
+    // Хамтрагч дуу хуваалцах товч дарах үед (Share Music)
     if(pd.nowPlaying && pd.nowPlaying.ts && (Date.now()-pd.nowPlaying.ts)<300000) {
       showPartnerMusic(pd.nowPlaying);
     } else {
@@ -949,7 +992,8 @@ function listenFirebase(){
       if(pmb) pmb.style.display='none';
     }
   });
-  // Listen for real-time heart pings
+
+  // 4. Зүрхэн пинг (Heart Ping) шууд сонсох
   dbRef.child('heartPing').on('value', snap=>{
     if(!snap.exists()) return;
     var hp = snap.val();
@@ -957,11 +1001,12 @@ function listenFirebase(){
       showIncomingHeartPing(hp.from);
     }
   });
-  // Set my online status
+
+  // Өөрийн онлайн төлвийг идэвхжүүлэх
   setOnline(true);
   window.addEventListener('beforeunload',()=>setOnline(false));
 }
-
+  
 function setOnline(on){
   if(!DB||!S.pairCode) return;
   var roomId=[S.pairCode,S.partnerCode].sort().join('_');
@@ -1526,11 +1571,44 @@ function renderWishes(){
       '<button class="del-x" onclick="delWish('+i+')">×</button></div>';
   }).join('');
 }
-function toggleWish(i){S.wishes[i].done=!S.wishes[i].done;save();syncWishes();renderWishes();if(S.wishes[i].done)floatHeart('🌟');}
-function delWish(i){if(!confirm('Устгах уу?'))return;S.wishes.splice(i,1);save();syncWishes();renderWishes();}
+function toggleWish(i){
+  S.wishes[i].done = !S.wishes[i].done;
+  save();
+  syncWishes();
+  renderWishes();
+  if(S.wishes[i].done) floatHeart('🌟');
+  
+  // ЭНЭ МӨРИЙГ НЭМЖ БАЙНА: Firebase-ийн дундын бааз руу шинэ төлөвийг илгээх
+  if(dbRef) dbRef.child('wishes').set(S.wishes);
+}
+function delWish(i){
+  if(!confirm('Устгах уу?')) return;
+  S.wishes.splice(i,1);
+  save();
+  syncWishes();
+  renderWishes();
+  
+  // ЭНЭ МӨРИЙГ НЭМЖ БАЙНА: Баазаас устгагдсан шинэ жагсаалтыг Firebase руу илгээх
+  if(dbRef) dbRef.child('wishes').set(S.wishes);
+}
 function addWish(){
-  var inp=document.getElementById('wish-inp');var txt=inp.value.trim();if(!txt)return;
-  S.wishes.push({text:txt,done:false});save();syncWishes();inp.value='';renderWishes();floatHeart('🌟');
+  var inp = document.getElementById('wish-inp');
+  var txt = inp.value.trim();
+  if(!txt) return;
+
+  // 1. Локал санах ойн жагсаалтад нэмэх (Бүтэц нь title байх ёстой)
+  S.wishes.push({ title: txt, done: false });
+  
+  // 2. Утасны дотоод санах ойд хадгалах, дэлгэцийг шинэчлэх
+  save(); 
+  inp.value = ''; 
+  renderWishes(); 
+  floatHeart('🌟');
+  
+  // 3. ЖИНХЭНЭ ШИЙДЭЛ: Firebase-ийн дундын өрөө рүү шууд илгээх
+  if(dbRef) {
+    dbRef.child('wishes').set(S.wishes);
+  }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1570,6 +1648,7 @@ function addMem(){
   var dateStr=now.getFullYear()+'/'+(now.getMonth()+1)+'/'+now.getDate();
   S.memories.unshift({title:t,body:b,author:aLabel,date:dateStr,img:img&&img.length>10?img:''});
   save();syncMems();renderMems();
+  if(dbRef) dbRef.child('memories').set(S.memories);
   document.getElementById('mem-title-inp').value='';
   document.getElementById('mem-body-inp').value='';
   document.getElementById('mem-img-preview').style.display='none';
@@ -1577,7 +1656,8 @@ function addMem(){
   document.getElementById('mem-form').classList.remove('show');
   floatHeart('📸');
 }
-function delMem(i){if(!confirm('Устгах уу?'))return;S.memories.splice(i,1);save();syncMems();renderMems();}
+function delMem(i){if(!confirm('Устгах уу?'))return;S.memories.splice(i,1);save();syncMems();renderMems();
+if(dbRef) dbRef.child('memories').set(S.memories); }
 
 // ══════════════════════════════════════════════════════════
 // LOCATION
@@ -1677,28 +1757,36 @@ function updatePlayer(){
 }
 
 function togglePlay(){
-  S.isPlaying=!S.isPlaying; save();
+  S.isPlaying=!S.isPlaying; 
+  save();
   updatePlayer();
+  // Realtime: Тоглуулах төлөвийг бааз руу илгээх
+  if(dbRef) dbRef.child('musicState').set({ curSong: S.curSong, isPlaying: S.isPlaying });
 }
-
 function playSong(i){
-  S.curSong=i; S.isPlaying=true; save();
-  // Force iframe reload for new song
+  S.curSong=i; S.isPlaying=true; 
+  save();
   document.getElementById('yt-iframe').src='';
   setTimeout(updatePlayer, 100);
+  // Realtime: Сонгосон дууг бааз руу илгээх
+  if(dbRef) dbRef.child('musicState').set({ curSong: S.curSong, isPlaying: S.isPlaying });
 }
-
 function nextSong(){
-  S.curSong=(S.curSong+1)%S.songs.length; save();
+  S.curSong=(S.curSong+1)%S.songs.length; 
+  save();
   document.getElementById('yt-iframe').src='';
   setTimeout(updatePlayer, 100);
+  // Realtime: Дараагийн дууг бааз руу илгээх
+  if(dbRef) dbRef.child('musicState').set({ curSong: S.curSong, isPlaying: S.isPlaying });
 }
 function prevSong(){
-  S.curSong=(S.curSong-1+S.songs.length)%S.songs.length; save();
+  S.curSong=(S.curSong-1+S.songs.length)%S.songs.length; 
+  save();
   document.getElementById('yt-iframe').src='';
   setTimeout(updatePlayer, 100);
+  // Realtime: Өмнөх дууг бааз руу илгээх
+  if(dbRef) dbRef.child('musicState').set({ curSong: S.curSong, isPlaying: S.isPlaying });
 }
-
 function setVol(v){S.volume=v;save();}
 
 function addSong(){
@@ -1706,16 +1794,26 @@ function addSong(){
   var artist=document.getElementById('yt-artist-inp').value.trim();
   var url=document.getElementById('yt-url-inp').value.trim();
   if(!title){alert('Дууны нэрийг оруулна уу');return;}
+  
   var emojis=['🎵','🎶','💋','🌹','🕊️','💕','🎸','🎹','🎺','🥁'];
   S.songs.push({title:title, artist:artist||'—', emoji:emojis[Math.floor(Math.random()*emojis.length)], dur:0, url:url});
-  save(); renderPlaylist(); updatePlayer();
+  
+  save(); 
+  renderPlaylist(); 
+  updatePlayer();
+  
+  // Realtime: Шинэчлэгдсэн плейлистийг бааз руу илгээх
+  if(dbRef) dbRef.child('songs').set(S.songs);
+
   document.getElementById('yt-title-inp').value='';
   document.getElementById('yt-artist-inp').value='';
   document.getElementById('yt-url-inp').value='';
+  
   if(url) {
-    // Auto-play the new song
-    S.curSong = S.songs.length-1; S.isPlaying=true; save();
+    S.curSong = S.songs.length-1; S.isPlaying=true; 
+    save();
     setTimeout(updatePlayer,150);
+    if(dbRef) dbRef.child('musicState').set({ curSong: S.curSong, isPlaying: S.isPlaying });
   }
 }
 
@@ -1723,7 +1821,16 @@ function delSong(i){
   if(!confirm('Устгах уу?'))return;
   S.songs.splice(i,1);
   if(S.curSong>=S.songs.length) S.curSong=0;
-  save(); renderPlaylist(); updatePlayer();
+  
+  save(); 
+  renderPlaylist(); 
+  updatePlayer();
+  
+  // Realtime: Устгагдсаны дараах плейлистийг бааз руу илгээх
+  if(dbRef) {
+    dbRef.child('songs').set(S.songs);
+    dbRef.child('musicState').set({ curSong: S.curSong, isPlaying: S.isPlaying });
+  }
 }
 
 // Share currently playing song to partner
@@ -1830,6 +1937,7 @@ function useCoup(i){
   var now=new Date();var t=now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
   S.coupHist.unshift({icon:c.icon,name:c.name,time:t});
   save();renderCoupons();floatHeart(c.icon);
+  if(dbRef) dbRef.child('coupons').set(S.coupons);
 }
 function delCoup(i){if(!confirm('Купон устгах уу?'))return;S.coupons.splice(i,1);save();renderCoupons();}
 function showAddCouponModal(){document.getElementById('add-coup-modal').classList.add('show');}
@@ -1844,6 +1952,8 @@ function addCoupon(){
   document.getElementById('coup-icon-inp').value='';
   document.getElementById('coup-name-inp').value='';
   document.getElementById('coup-desc-inp').value='';
+  // Firebase рүү купоныг илгээх
+  if(dbRef) dbRef.child('coupons').set(S.coupons);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1881,7 +1991,11 @@ function addSchItem(){
   var target=S.schWho==='me'?S.mySchedule:S.partnerSchedule;
   if(!target[S.schDay])target[S.schDay]=[];
   target[S.schDay].push({name:name,time:time,loc:loc||'—',c:schSelColor});
-  save();renderSch();document.getElementById('add-sch-modal').classList.remove('show');
+  save();renderSch();
+  // Firebase рүү календарийн үйл явдлыг илгээх
+  if(dbRef) dbRef.child('events').set(SCH_EVENTS);
+  
+  document.getElementById('add-sch-modal').classList.remove('show');
   document.getElementById('sch-name-inp').value='';
   document.getElementById('sch-time-inp').value='';
   document.getElementById('sch-loc-inp').value='';
