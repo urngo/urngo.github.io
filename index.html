@@ -2260,5 +2260,20 @@ window.addEventListener('load',function(){
   localStorage.setItem('kp-lastopen',Date.now());
 });
 </script>
+  <!-- GitHub Pages дээр Service Worker бүртгэх шинэ код -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      // sw.js файлыг системд бүртгэж ажиллуулна
+      navigator.serviceWorker.register('sw.js')
+        .then(function(registration) {
+          console.log('Service Worker амжилттай бүртгэгдлээ, хамрах хүрээ: ', registration.scope);
+        })
+        .catch(function(error) {
+          console.error('Service Worker бүртгэхэд алдаа гарлаа: ', error);
+        });
+    });
+  }
+</script>
 </body>
 </html>
