@@ -2268,6 +2268,17 @@ window.addEventListener('load',function(){
       navigator.serviceWorker.register('sw.js')
         .then(function(registration) {
           console.log('Service Worker амжилттай бүртгэгдлээ, хамрах хүрээ: ', registration.scope);
+          
+          // 🔔 Сервис воркер бүртгэгдсэний дараа Мэдэгдэл илгээх зөвшөөрөл гуйна
+          if ('Notification' in window) {
+            Notification.requestPermission().then(function(permission) {
+              if (permission === 'granted') {
+                console.log('Мэдэгдэл илгээх эрхийг хэрэглэгч зөвшөөрлөө! 🎉');
+              } else {
+                console.log('Мэдэгдэл илгээх эрхийг татгалзлаа. ❌');
+              }
+            });
+          }
         })
         .catch(function(error) {
           console.error('Service Worker бүртгэхэд алдаа гарлаа: ', error);
