@@ -10,7 +10,7 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 
 // ── Өөрийн Firebase config оруулах ──────────────────────
-const firebaseConfig = {
+const FB_CONFIG = {
   apiKey: "AIzaSyCUhbpnhv8zLyAfBbZ1Lvnv65pPJ2PSXHw",
   authDomain: "kissping-cd09c.firebaseapp.com",
   databaseURL: "https://kissping-cd09c-default-rtdb.firebaseio.com",
