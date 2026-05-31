@@ -1152,12 +1152,18 @@ function listenFirebase(){
   });
   // Canvas clear signal (handled inside initCanvas)
 
-  // ── Partner notification pings ──
-  ref.child('notify').on('value', function(snap){
+ // ── Partner notification pings ──
+  // .on('value')-ийг .on('child_added') болгож өөрчилснөөр хуучин мэдэгдлүүд чамд буцаж харагдахгүй
+  ref.child('notify').limitToLast(1).on('child_added', function(snap){
     if(!snap.exists()) return;
     var n = snap.val();
+    
+    // Хэрэв мэдэгдлийг би өөрөө илгээсэн бол (S.myName таарвал) эсвэл нэр байхгүй бол шууд алгасна
     if(!n || n.from === S.myName) return;
-    if(!n.ts || (Date.now()-n.ts)>30000) return; // ignore old
+    
+    // Хэрэв 10 секундээс хуучин мэдэгдэл байвал харуулахгүй (Хуучин датаг алгасах)
+    if(!n.ts || (Date.now() - n.ts) > 10000) return;
+    
     // Show toast
     var toast=document.getElementById('home-toast'); var toastTxt=document.getElementById('toast-txt');
     if(toast&&toastTxt){
@@ -1171,7 +1177,12 @@ function listenFirebase(){
 
   // Set my presence & setup disconnect
   setMyPresence(true);
-  DB.ref('rooms/'+roomId+'/users/'+S.pairCode+'/online').onDisconnect().set(false);
+  
+  // Аюулгүй байдлын үүднээс S.pairCode зөв эсэхийг шалгаж байж onDisconnect-ийг тохируулна
+  if (S.pairCode) {
+    DB.ref('rooms/'+roomId+'/users/'+S.pairCode+'/online').onDisconnect().set(false);
+  }
+  
   window.addEventListener('beforeunload', function(){ setMyPresence(false); });
   window.addEventListener('pagehide', function(){ setMyPresence(false); });
 }
@@ -1219,16 +1230,18 @@ function syncSchedule(){
 // ── Universal notification to partner ──
 // Sends a ping via Firebase that triggers notification on partner's device
 // 1. Хамтрагч руугаа мэдэгдэл илгээх (Хэвээрээ үлдсэн)
+// ── Universal notification to partner ──
 function notifyPartner(icon, text){
   if(!DB || !S.pairCode || !roomId) return;
-  DB.ref('rooms/'+roomId+'/notify').set({
+  
+  // .set биш .push ашиглан мэдэгдэл болгоныг шинээр цувуулж оруулна
+  DB.ref('rooms/'+roomId+'/notify').push({
     icon: icon||'💕',
     text: text||'',
     from: S.myName||'Хайрт',
     ts: Date.now()
   });
 }
-
 // 2. Мэдэгдэл харуулах зөвшөөрөл шалгах (FCM токен авах логикийг залгаж өгсөн)
 function ensureNotifPermission(cb){
   if(!('Notification' in window)) return;
