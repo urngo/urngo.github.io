@@ -1597,7 +1597,12 @@ function showIncomingHeartPing(fromName, type){
   floatHeart('💋'); floatHeart('❤️'); floatHeart('💕');
   setTimeout(function(){floatHeart('🌹');},200);
   setTimeout(function(){floatHeart('💋');},400);
-  var msg = type==='missyou' ? (fromName||'Хайрт')+' чинь маш их санаж байна! 💌' : (fromName||'Хайрт')+' чинь чамайг санаж байна! 💕';
+  
+  // Уян хатан шалгалт: 'missyou' эсвэл 'miss_you' аль нь ч ирсэн 'Маш их санаж байна' гэж хүлээж авна! ✅
+  var msg = (type === 'missyou' || type === 'miss_you') 
+    ? (fromName || 'Хайрт') + ' чинь маш их санаж байна! 💌' 
+    : (fromName || 'Хайрт') + ' чинь чамайг санаж байна! 💕';
+    
   var toast = document.getElementById('home-toast');
   var toastTxt = document.getElementById('toast-txt');
   if(toast && toastTxt){
@@ -1605,12 +1610,26 @@ function showIncomingHeartPing(fromName, type){
     toastTxt.innerHTML = '<div style="font-size:22px;margin-bottom:4px;">💋</div><div>'+msg+'</div>';
     setTimeout(function(){toast.classList.remove('show');}, 6000);
   }
-  // Try browser notification
+  
+  // Browser notification (Утасны системд найдвартай харуулах)
   if(Notification && Notification.permission==='granted'){
-    new Notification('💋 Kiss Ping', {body:msg, icon:'icon-192.png', vibrate:[200,100,200]});
+    // Хэрэв Service Worker ажиллаж байвал утасны цаад системд (background) илүү гоё харагддаг
+    if(navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.ready.then(function(reg) {
+        reg.showNotification('💋 Kiss Ping', {
+          body: msg,
+          icon: 'icon-192.png',
+          badge: 'icon-192.png',
+          vibrate: [200,100,200]
+        });
+      });
+    } else {
+      // Энгийн броузер дээр харуулах
+      new Notification('💋 Kiss Ping', {body:msg, icon:'icon-192.png', vibrate:[200,100,200]});
+    }
   } else if(Notification && Notification.permission!=='denied'){
     Notification.requestPermission().then(function(p){
-      if(p==='granted') new Notification('💋 Kiss Ping',{body:msg});
+      if(p==='granted') new Notification('💋 Kiss Ping',{body:msg, icon:'icon-192.png'});
     });
   }
 }
