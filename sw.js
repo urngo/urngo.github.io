@@ -40,12 +40,13 @@ self.addEventListener('activate', function(event) {
 
 // Fetch — cache-first, fallback to network
 self.addEventListener('fetch', function(event) {
-  // Firebase SDK болон external requests-г skip хийнэ
-  if (event.request.url.includes('googleapis') ||
+  // Realtime Database (firebaseio.com) болон Google/Firebase-ийн бүх хүсэлтийг кэшлэхгүй, ШУУД алгасна! ✅
+  if (event.request.url.includes('firebaseio.com') ||
+      event.request.url.includes('googleapis') ||
       event.request.url.includes('gstatic') ||
       event.request.url.includes('firebase') ||
       event.request.url.includes('youtube')) {
-    return;
+    return; // Эндээс шууд гарч, сүлжээ рүү чөлөөтэй нэвтрүүлнэ
   }
 
   event.respondWith(
