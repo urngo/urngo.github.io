@@ -1218,6 +1218,7 @@ function syncSchedule(){
 
 // ── Universal notification to partner ──
 // Sends a ping via Firebase that triggers notification on partner's device
+// 1. Хамтрагч руугаа мэдэгдэл илгээх (Хэвээрээ үлдсэн)
 function notifyPartner(icon, text){
   if(!DB || !S.pairCode || !roomId) return;
   DB.ref('rooms/'+roomId+'/notify').set({
@@ -1228,26 +1229,66 @@ function notifyPartner(icon, text){
   });
 }
 
-// Request notification permission on page load
+// 2. Мэдэгдэл харуулах зөвшөөрөл шалгах (FCM токен авах логикийг залгаж өгсөн)
 function ensureNotifPermission(cb){
   if(!('Notification' in window)) return;
-  if(Notification.permission==='granted'){ if(cb) cb(); return; }
+  if(Notification.permission==='granted'){ 
+    if(cb) cb(); 
+    setupFCMToken(); // Эрх зөвшөөрөгдсөн үед токен авна
+    return; 
+  }
   if(Notification.permission!=='denied'){
-    Notification.requestPermission().then(function(p){ if(p==='granted'&&cb) cb(); });
+    Notification.requestPermission().then(function(p){ 
+      if(p==='granted') {
+        if(cb) cb(); 
+        setupFCMToken(); // Эрх зөвшөөрөгдсөн үед токен авна
+      }
+    });
   }
 }
 
-// Show a local browser notification
+// 3. Броузер дээр локал мэдэгдэл харуулах (Утасны цаад системд зориулж сайжруулсан)
 function showNotif(title, body, icon){
   ensureNotifPermission(function(){
     try{
-      new Notification(title||'Kiss Ping 💋', {
-        body: body||'',
-        icon: icon||'',
-        badge: '',
-        vibrate: [200,100,200]
-      });
+      // Хэрэв Service Worker бэлэн байвал утасны системд илүү найдвартай харуулна
+      if(navigator.serviceWorker && navigator.serviceWorker.controller){
+        navigator.serviceWorker.ready.then(function(reg){
+          reg.showNotification(title||'Kiss Ping 💋', {
+            body: body||'',
+            icon: icon||'icon-192.png',
+            badge: 'icon-192.png',
+            vibrate: [200,100,200]
+          });
+        });
+      } else {
+        // Жирийн үед шууд харуулах хуучин хувилбар
+        new Notification(title||'Kiss Ping 💋', {
+          body: body||'',
+          icon: icon||'icon-192.png',
+          badge: '',
+          vibrate: [200,100,200]
+        });
+      }
     }catch(e){ console.log('Notif error:',e); }
+  });
+}
+
+// ➕ ШИНЭЭР НЭМСЭН ФУНКЦ: Утасны мэдэгдлийн токенийг Firebase-д хадгалах
+function setupFCMToken(){
+  if(typeof messaging === 'undefined') return;
+  
+  // Сая хоёулаа Firebase-ээс олсон VAPID түлхүүр
+  const VAPID_KEY = "BMyZBtlLZ8oZGeLLr8LfnccAldXz8HjZLF_v1hCKB0DvWy3gIGFBU96fBDXTUYoXQtQgE-RHhrIu_chyBp3CG1Q";
+  
+  messaging.getToken({ vapidKey: VAPID_KEY }).then(function(token){
+    if(token && roomId && S.myName){
+      // Токенийг өөрийн нэрээр дата баазад тусад нь бүртгэнэ
+      DB.ref('rooms/' + roomId + '/tokens/' + S.myName).set(token);
+      console.log('FCM Token амжилттай хадгалагдлаа ✅');
+    }
+  }).catch(function(err){
+    console.log('Token авахад алдаа гарлаа:', err);
   });
 }
 
