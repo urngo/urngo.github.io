@@ -10,14 +10,15 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 
 // ── Өөрийн Firebase config оруулах ──────────────────────
-const FB_CONFIG = {
-  apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT.firebaseapp.com",
-  databaseURL:       "https://YOUR_PROJECT-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:         "YOUR_PROJECT",
-  storageBucket:     "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId:             "YOUR_APP_ID"
+const firebaseConfig = {
+  apiKey: "AIzaSyCUhbpnhv8zLyAfBbZ1Lvnv65pPJ2PSXHw",
+  authDomain: "kissping-cd09c.firebaseapp.com",
+  databaseURL: "https://kissping-cd09c-default-rtdb.firebaseio.com",
+  projectId: "kissping-cd09c",
+  storageBucket: "kissping-cd09c.firebasestorage.app",
+  messagingSenderId: "763351888123",
+  appId: "1:763351888123:web:1a62facd5fe4dc2122005e",
+  measurementId: "G-VRGVCMMMM5"
 };
 // ─────────────────────────────────────────────────────────
 
